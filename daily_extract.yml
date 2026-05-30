@@ -1,8 +1,8 @@
-name: Daily phrase auto-extract
+name: Daily English phrase auto-extract
 
 on:
   schedule:
-    - cron: "0 0 * * *"  # Every day at 9:00 AM JST (00:00 UTC)
+    - cron: "30 0 * * *"  # Every day at 9:30 AM JST (00:30 UTC)
   workflow_dispatch:      # Allow manual trigger from GitHub UI
 
 jobs:
@@ -17,12 +17,11 @@ jobs:
           python-version: "3.11"
 
       - name: Install dependencies
-        run: pip install requests anthropic
+        run: pip install requests nltk beautifulsoup4
 
       - name: Run auto-extract script
         env:
           NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
           NOTION_DATABASE_ID: ${{ secrets.NOTION_DATABASE_ID }}
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-        run: python scripts/auto_extract.py
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: python scripts/auto_extract_en.py
