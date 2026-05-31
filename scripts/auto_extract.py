@@ -1,25 +1,23 @@
 import os
-import json
 import requests
 import nltk
 from nltk.corpus import stopwords
 from nltk.tokenize import word_tokenize
 from collections import Counter
-import re
+from bs4 import BeautifulSoup
+import xml.etree.ElementTree as ET
 
-# Download required NLTK data
-nltk.download('punkt')
-nltk.download('punkt_tab')
-nltk.download('stopwords')
+nltk.download('punkt', quiet=True)
+nltk.download('punkt_tab', quiet=True)
+nltk.download('stopwords', quiet=True)
 
 NOTION_TOKEN = os.environ["NOTION_TOKEN"]
 NOTION_DATABASE_ID = os.environ["NOTION_DATABASE_ID"]
 DISCORD_WEBHOOK_URL = os.environ["DISCORD_WEBHOOK_URL"]
 
-# News sources for scraping
-ARTICLE_URLS = [
-    "https://www.bbc.com/news",
-    "https://www.theguardian.com/world",
+RSS_FEEDS = [
+    "https://feeds.bbci.co.uk/news/world/rss.xml",
+    "https://www.theguardian.com/world/rss",
 ]
 
 NOTION_HEADERS = {
@@ -28,120 +26,79 @@ NOTION_HEADERS = {
     "Notion-Version": "2022-06-28",
 }
 
-# Common English words (basic TOEFL level) - if a word is NOT in this list, it's more advanced
 COMMON_WORDS = {
-    "the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "for", "of", "with",
-    "is", "are", "was", "were", "be", "been", "have", "has", "do", "does", "did",
-    "can", "could", "will", "would", "should", "may", "might", "must",
-    "about", "after", "before", "between", "from", "into", "through", "during",
-    "above", "below", "up", "down", "out", "off", "over", "under",
-    "again", "further", "then", "once", "very", "just", "also", "only", "same", "such",
-    "no", "nor", "not", "own", "than", "too", "what", "which", "who", "when", "where",
-    "why", "how", "all", "each", "every", "both", "few", "more", "most", "some", "any",
-    "this", "that", "these", "those", "i", "you", "he", "she", "it", "we", "they", "me",
-    "him", "her", "us", "them", "my", "your", "his", "her", "its", "our", "their",
-    "what", "which", "who", "whom", "whose", "here", "there", "there", "get", "got",
-    "make", "made", "take", "took", "come", "came", "go", "went", "know", "knew",
-    "think", "thought", "say", "said", "tell", "told", "ask", "asked", "work", "worked",
-    "want", "wanted", "need", "needed", "feel", "felt", "try", "tried", "use", "used",
-    "find", "found", "give", "gave", "tell", "told", "see", "saw", "seem", "seemed",
-    "help", "helped", "talk", "talked", "turn", "turned", "start", "started", "show",
-    "showed", "hear", "heard", "let", "left", "put", "putting", "mean", "meant", "keep",
-    "kept", "meet", "met", "run", "ran", "pay", "paid", "sit", "sat", "stand", "stood",
-    "lose", "lost", "fall", "fell", "cut", "cut", "reach", "reached", "kill", "killed",
-    "remain", "remained", "suggest", "suggested", "raise", "raised", "live", "lived",
-    "believe", "believed", "hold", "held", "bring", "brought", "happen", "happened",
-    "write", "wrote", "provide", "provided", "sit", "sat", "stand", "stood", "lose",
-    "lost", "pay", "paid", "meet", "met", "include", "included", "continue", "continued",
-    "set", "set", "learn", "learned", "change", "changed", "lead", "led", "understand",
-    "understood", "watch", "watched", "follow", "followed", "stop", "stopped", "create",
-    "created", "speak", "spoke", "read", "read", "allow", "allowed", "add", "added",
-    "spend", "spent", "grow", "grew", "open", "opened", "walk", "walked", "win", "won",
-    "offer", "offered", "remember", "remembered", "love", "loved", "consider", "considered",
-    "appear", "appeared", "buy", "bought", "wait", "waited", "serve", "served", "die",
-    "died", "send", "sent", "expect", "expected", "build", "built", "stay", "stayed",
-    "fall", "fell", "cut", "cut", "reach", "reached", "kill", "killed", "remain", "remained",
-    "suggest", "suggested", "raise", "raised", "live", "lived", "believe", "believed",
-    "hold", "held", "bring", "brought", "happen", "happened", "write", "wrote", "provide",
-    "provided", "person", "man", "woman", "child", "boy", "girl", "day", "year", "time",
-    "week", "month", "hour", "minute", "second", "week", "world", "place", "country",
-    "city", "town", "house", "home", "room", "door", "window", "wall", "floor", "roof",
-    "street", "road", "water", "food", "money", "work", "business", "job", "school",
-    "book", "paper", "word", "language", "story", "reason", "result", "problem",
-    "question", "answer", "idea", "thought", "feeling", "heart", "hand", "foot", "head",
-    "eye", "ear", "nose", "mouth", "face", "body", "life", "death", "love", "hate",
-    "good", "bad", "new", "old", "young", "big", "small", "high", "low", "long", "short",
-    "fast", "slow", "hot", "cold", "warm", "cool", "bright", "dark", "light", "heavy",
-    "light", "easy", "difficult", "hard", "soft", "strong", "weak", "happy", "sad",
-    "angry", "afraid", "free", "clear", "dark", "deep", "full", "empty", "live", "dead",
-    "true", "false", "right", "wrong", "real", "possible", "probable", "different",
-    "similar", "same", "equal", "different", "better", "worse", "best", "worst", "one",
-    "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "hundred",
-    "thousand", "million", "first", "second", "third", "last", "next", "last", "many",
-    "few", "several", "many", "less", "little", "much", "more", "most", "all", "other",
-    "another", "such", "same", "certain", "sure", "able", "possible", "important",
-    "serious", "common", "public", "private", "social", "political", "economic",
-    "medical", "legal", "physical", "mental", "human", "natural", "general", "special",
-    "normal", "unusual", "typical", "unusual", "wonderful", "terrible", "excellent",
-    "poor", "rich", "poor", "cheap", "expensive", "east", "west", "north", "south",
-    "usually", "sometimes", "always", "never", "often", "rarely", "suddenly",
-    "slowly", "quickly", "gradually", "carefully", "easily", "definitely", "probably",
-    "certainly", "perhaps", "maybe"
+    "the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "for", "of",
+    "with", "is", "are", "was", "were", "be", "been", "have", "has", "do", "does",
+    "did", "can", "could", "will", "would", "should", "may", "might", "must",
+    "about", "after", "before", "from", "into", "through", "this", "that", "these",
+    "those", "you", "he", "she", "it", "we", "they", "me", "him", "her", "us",
+    "them", "my", "your", "his", "its", "our", "their", "what", "which", "who",
+    "when", "where", "why", "how", "all", "each", "every", "both", "few", "more",
+    "most", "some", "any", "here", "there", "get", "got", "make", "made", "take",
+    "took", "come", "came", "go", "went", "know", "think", "say", "said", "tell",
+    "told", "ask", "see", "saw", "look", "want", "need", "feel", "try", "use",
+    "find", "give", "help", "also", "just", "very", "only", "then", "than", "so",
+    "not", "one", "two", "first", "last", "new", "old", "good", "bad", "big",
+    "small", "year", "time", "day", "way", "man", "woman", "people", "world",
+    "life", "work", "while", "however", "because", "since", "still", "even",
+    "much", "many", "well", "now", "back", "per", "mr", "ms", "according",
+    "including", "number", "part", "used", "called", "among", "around", "against",
+    "without", "within", "along", "across", "like", "three", "four", "five",
+    "six", "seven", "eight", "nine", "ten", "hundred", "thousand", "million",
+    "billion", "percent", "high", "low", "long", "short", "another", "other",
+    "rather", "quite", "already", "always", "never", "often", "away", "down",
+    "home", "left", "right", "next", "later", "early", "late", "over", "under",
+    "again", "same", "such", "own", "too", "also", "news", "said", "says",
+    "view", "hide", "search", "show", "more", "home", "sign", "skip", "menu",
+    "share", "read", "watch", "listen", "live", "click", "open", "close",
 }
 
 
+def get_article_urls_from_rss(rss_url, max_articles=3):
+    try:
+        response = requests.get(rss_url, timeout=10, headers={"User-Agent": "Mozilla/5.0"})
+        response.raise_for_status()
+        root = ET.fromstring(response.content)
+        urls = []
+        for item in root.findall('.//item')[:max_articles]:
+            link = item.find('link')
+            if link is not None and link.text:
+                urls.append(link.text.strip())
+        return urls
+    except Exception as e:
+        print(f"RSS fetch failed {rss_url}: {e}")
+        return []
+
+
 def fetch_article_text(url):
-    """Fetch plain text content from a URL."""
     try:
         response = requests.get(url, timeout=10, headers={"User-Agent": "Mozilla/5.0"})
         response.raise_for_status()
-        from html.parser import HTMLParser
-
-        class TextExtractor(HTMLParser):
-            def __init__(self):
-                super().__init__()
-                self.text = []
-                self.skip = False
-
-            def handle_starttag(self, tag, attrs):
-                if tag in ("script", "style", "nav", "footer", "aside"):
-                    self.skip = True
-
-            def handle_endtag(self, tag):
-                if tag in ("script", "style", "nav", "footer", "aside"):
-                    self.skip = False
-
-            def handle_data(self, data):
-                if not self.skip and data.strip():
-                    self.text.append(data.strip())
-
-        extractor = TextExtractor()
-        extractor.feed(response.text)
-        return " ".join(extractor.text)[:5000]
+        soup = BeautifulSoup(response.content, 'lxml')
+        # Remove non-content elements
+        for tag in soup(['script', 'style', 'nav', 'footer', 'header', 'aside', 'figure']):
+            tag.decompose()
+        # Extract paragraph text only
+        paragraphs = soup.find_all('p')
+        text = ' '.join(p.get_text() for p in paragraphs)
+        return text[:5000]
     except Exception as e:
-        print(f"Failed to fetch {url}: {e}")
+        print(f"Article fetch failed {url}: {e}")
         return ""
 
 
 def extract_advanced_words(text):
-    """Extract advanced English words (NOT in common word list)."""
     try:
         tokens = word_tokenize(text.lower())
         stop_words = set(stopwords.words('english'))
-        
-        # Filter: only words not in common list, not stopwords, length > 3
         advanced = [
-            word for word in tokens 
-            if (len(word) > 3 
-                and word.isalpha() 
-                and word not in COMMON_WORDS 
-                and word not in stop_words
-                and not word.startswith("'"))
+            word for word in tokens
+            if (len(word) > 6
+                and word.isalpha()
+                and word not in COMMON_WORDS
+                and word not in stop_words)
         ]
-        
-        # Count frequency and get top words
-        word_freq = Counter(advanced)
-        return word_freq.most_common(10)
+        return Counter(advanced).most_common(15)
     except Exception as e:
         print(f"Extraction failed: {e}")
         return []
@@ -159,19 +116,13 @@ def get_existing_phrases():
     }
 
 
-def get_word_definition(word):
-    """Simple definition lookup - could integrate with API later."""
-    # For now, return a placeholder; could use free API
-    return f"Advanced English word"
-
-
-def add_phrase_to_notion(phrase, meaning):
+def add_phrase_to_notion(phrase):
     url = "https://api.notion.com/v1/pages"
     payload = {
         "parent": {"database_id": NOTION_DATABASE_ID},
         "properties": {
             "Phrase": {"title": [{"text": {"content": phrase}}]},
-            "Meaning": {"rich_text": [{"text": {"content": meaning}}]},
+            "Meaning": {"rich_text": [{"text": {"content": ""}}]},
             "Category": {"select": {"name": "Academic"}},
             "Difficulty": {"select": {"name": "Advanced"}},
             "Status": {"select": {"name": "New"}},
@@ -184,9 +135,9 @@ def add_phrase_to_notion(phrase, meaning):
 def notify_discord(added_phrases):
     if not added_phrases:
         return
-    lines = [f"🤖 **Daily auto-extract: {len(added_phrases)} new advanced words!**\n"]
-    for phrase, count in added_phrases:
-        lines.append(f"• **{phrase}** (appeared {count} times)")
+    lines = [f"📚 **Daily vocab: {len(added_phrases)} new words added to Notion!**\n"]
+    for phrase, _ in added_phrases:
+        lines.append(f"• **{phrase}**")
     requests.post(DISCORD_WEBHOOK_URL, json={"content": "\n".join(lines)})
 
 
@@ -194,24 +145,29 @@ def main():
     existing = get_existing_phrases()
     all_added = []
 
-    for url in ARTICLE_URLS:
-        print(f"Fetching: {url}")
-        text = fetch_article_text(url)
-        if not text:
-            continue
+    for rss_url in RSS_FEEDS:
+        print(f"Fetching RSS: {rss_url}")
+        article_urls = get_article_urls_from_rss(rss_url)
+        print(f"Found {len(article_urls)} articles")
 
-        print("Extracting advanced words...")
-        words = extract_advanced_words(text)
+        for url in article_urls:
+            print(f"Fetching article: {url}")
+            text = fetch_article_text(url)
+            if not text:
+                continue
 
-        for word, count in words[:5]:  # Take top 5
-            if word.lower() not in existing:
-                meaning = get_word_definition(word)
-                add_phrase_to_notion(word, meaning)
-                all_added.append((word, count))
-                existing.add(word.lower())
-                print(f"✅ Added: {word}")
-            else:
-                print(f"⏭️  Skipped: {word}")
+            print(f"Extracted {len(text)} chars")
+            words = extract_advanced_words(text)
+            print(f"Top words: {[w for w, _ in words[:10]]}")
+
+            for word, count in words[:3]:
+                if word.lower() not in existing:
+                    add_phrase_to_notion(word)
+                    all_added.append((word, count))
+                    existing.add(word.lower())
+                    print(f"✅ Added: {word}")
+                else:
+                    print(f"⏭️  Skipped: {word}")
 
     notify_discord(all_added)
     print(f"\nDone! {len(all_added)} word(s) added.")
