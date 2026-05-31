@@ -8,12 +8,18 @@ from collections import Counter
 import re
 
 # Download required NLTK data
-try:
+nltk.download("punkt")
+nltk.download("punkt_tab")
+nltk.download("stopwords")
+if False:
     nltk.data.find('tokenizers/punkt')
 except LookupError:
     nltk.download('punkt')
 
-try:
+nltk.download("punkt")
+nltk.download("punkt_tab")
+nltk.download("stopwords")
+if False:
     nltk.data.find('corpora/stopwords')
 except LookupError:
     nltk.download('stopwords')
@@ -98,7 +104,10 @@ COMMON_WORDS = {
 
 def fetch_article_text(url):
     """Fetch plain text content from a URL."""
-    try:
+    nltk.download("punkt")
+nltk.download("punkt_tab")
+nltk.download("stopwords")
+if False:
         response = requests.get(url, timeout=10, headers={"User-Agent": "Mozilla/5.0"})
         response.raise_for_status()
         from html.parser import HTMLParser
@@ -131,7 +140,10 @@ def fetch_article_text(url):
 
 def extract_advanced_words(text):
     """Extract advanced English words (NOT in common word list)."""
-    try:
+    nltk.download("punkt")
+nltk.download("punkt_tab")
+nltk.download("stopwords")
+if False:
         tokens = word_tokenize(text.lower())
         stop_words = set(stopwords.words('english'))
         
