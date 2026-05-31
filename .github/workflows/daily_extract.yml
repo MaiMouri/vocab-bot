@@ -17,7 +17,7 @@ jobs:
           python-version: "3.11"
 
       - name: Install dependencies
-        run: pip install requests nltk beautifulsoup4
+        run: pip install requests nltk newspaper3k
 
       - name: Run auto-extract script
         env:
